@@ -39,7 +39,7 @@ export default class InventoryLoader {
 
   private retryCount = 0;
 
-  private startAssetID?: string;
+  private start?: number;
 
   public readonly appID: InventoryLoaderConstructor['appID'];
 
@@ -52,6 +52,8 @@ export default class InventoryLoader {
   public readonly steamCommunityJar?: InventoryLoaderConstructor['steamCommunityJar'];
 
   public readonly steamID64: string;
+
+  public readonly sessionid?: string;
 
   constructor({
     appID,
@@ -95,15 +97,27 @@ export default class InventoryLoader {
       clientOptions.proxyAddress = params?.proxyAddress;
     }
 
-    this.httpClient = new HttpClient(clientOptions);
-
     if (params?.steamCommunityJar) {
       defaultCookies.push(
         ...LoaderUtils.parseCookies(params?.steamCommunityJar),
       );
+
+      this.sessionid = defaultCookies
+        .find((item) => item.includes('sessionid'))
+        ?.replace('sessionid=', '')
+        .replace(';', '');
     }
 
-    this.httpClient.setDefaultCookies(defaultCookies.join(' '));
+    const cookie = defaultCookies.join(' ');
+
+    clientOptions.headers = {
+      ...this.getDefaultHeaders(),
+      cookie,
+    };
+
+    this.httpClient = new HttpClient(clientOptions);
+
+    this.httpClient.setDefaultCookies(cookie);
     this.httpClient.setDefaultHeaders(this.getDefaultHeaders());
   }
 
@@ -113,18 +127,20 @@ export default class InventoryLoader {
     this.httpClient.destroy();
   }
 
+  // eslint-disable-next-line class-methods-use-this
   private getDefaultHeaders(): IncomingHttpHeaders {
     return {
-      host: 'steamcommunity.com',
-      referer: `https://steamcommunity.com/profiles/${this.steamID64}/inventory`,
+      Referer: `https://steamcommunity.com/tradeoffer/new/`,
     };
   }
 
   private getRequestParams(): RequestParams {
     return {
-      l: this.language,
-      count: this.itemsPerPage,
-      start_assetid: this.startAssetID,
+      sessionid: this.sessionid as string,
+      partner: this.steamID64,
+      appid: this.appID,
+      contextid: this.contextID,
+      start: this.start,
     };
   }
 
@@ -140,7 +156,7 @@ export default class InventoryLoader {
   private async yieldRequest(): Promise<void> {
     try {
       const data = await this.httpClient.get(
-        `https://steamcommunity.com/inventory/${this.steamID64}/${this.appID}/${this.contextID}`,
+        `https://steamcommunity.com/tradeoffer/new/partnerinventory`,
         this.getRequestParams(),
       );
 
@@ -149,7 +165,12 @@ export default class InventoryLoader {
         return;
       }
 
-      if (!data || !data?.success || !data?.assets || !data?.descriptions) {
+      if (
+        !data ||
+        !data?.success ||
+        !data?.rgInventory ||
+        !data?.rgDescriptions
+      ) {
         if (this.retryCount < this.maxRetries) {
           await this.retryRequest();
           return;
@@ -166,10 +187,14 @@ export default class InventoryLoader {
         return;
       }
 
-      this.events.emit('data', data.descriptions, data.assets);
+      this.events.emit(
+        'data',
+        Object.values(data.rgDescriptions),
+        Object.values(data.rgInventory),
+      );
 
-      if (data.more_items) {
-        this.startAssetID = data.last_assetid;
+      if (data.more) {
+        this.start = data.more_start;
         await this.retryRequest();
         return;
       }

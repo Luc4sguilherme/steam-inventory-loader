@@ -6,11 +6,10 @@ import type { Tag } from './types/tag.type';
 
 export default class InventoryUtils {
   public static findDescriptionKey({
-    appid,
     classid,
     instanceid,
   }: ItemDescription | ItemAsset): string {
-    return `${classid}_${instanceid || '0'}_${appid}`;
+    return `${classid}_${instanceid || '0'}`;
   }
 
   private static parseTag(tag: SteamTag): Tag {

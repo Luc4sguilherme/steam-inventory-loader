@@ -35,7 +35,12 @@ export default class HttpClient {
 
   private static readonly defaultAgent: HttpsAgent = new HttpsAgent();
 
-  constructor({ proxyAddress, requestDelay }: HttpClientConstructor = {}) {
+  constructor({
+    proxyAddress,
+    requestDelay,
+    cookies,
+    headers,
+  }: HttpClientConstructor = {}) {
     if (proxyAddress) {
       this.proxyAgent = new HttpsProxyAgent({
         keepAlive: true,
@@ -45,6 +50,14 @@ export default class HttpClient {
 
     if (requestDelay) {
       this.requestDelay = requestDelay;
+    }
+
+    if (cookies) {
+      this.setDefaultCookies(cookies);
+    }
+
+    if (headers) {
+      this.setDefaultHeaders(headers);
     }
 
     this.client = Axios.create(this.getClientConstructor());
